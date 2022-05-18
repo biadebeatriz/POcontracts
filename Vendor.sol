@@ -29,6 +29,8 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
   int256  Price2 = 90*10**15;
   int256  Price3 = 95*10**15;
   int256  PricePO =100*10**15;
+  int256 PriceTeste = 4*10**15;
+  int256 PriceTest2 = 5*10**16;
   uint public index;
   uint256 public totalSold;
 
@@ -69,11 +71,10 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
     Mtoken = MentoraWellPlayedToken(tokenAddress);
   }
 
-
   function priceToken() public view returns (int256){
     
     if(isPO==true){
-      return PricePO;
+      return PriceTeste;
     }
     else if( maxSupplyBatch1 >=  totalSold){
       return Price1;
@@ -111,7 +112,7 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
     //Require para verificar se foi mandado MATIC
     require(msg.value > 0, "Send ETH to buy some tokens");
     uint _amountToBuy  = msg.value * SafeCast.toUint256(tokensPerMatic());
-    uint amountToBuy = _amountToBuy/10*10**18;
+    uint amountToBuy = _amountToBuy/(10*10**14);
     //Atualiza ordem de compra:
     OrderBuy(amountToBuy,MATIC,msg.sender);
     // EMIT the event
@@ -125,7 +126,7 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
       OrderBuy(_value,PIX,_account);
     }
 
-    function OrderBuy(uint256 _value, bytes32 _method, address _account) public onlyRole(BUYPIXROLE){
+    function OrderBuy(uint256 _value, bytes32 _method, address _account) private{
       Orders[index].account = _account;
       Orders[index].value = _value;
       Orders[index].method = _method;
