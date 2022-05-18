@@ -103,6 +103,7 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
     }
 
 
+
 //FUNÇÃO DE ATUALIZAÇÃO DA ORDEM DA COMPRA SE ELE COMPRAR POR PIX
 
 //FUNÇÃO PARA COMPRA COM MATIC E INTERAÇÃO COM O USUARIO
@@ -144,6 +145,10 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
       bytes32 method = Orders[_index].method;
       uint256 ammount = Orders[index].value;
       return (account, method, ammount);
+    }
+
+    function getAccountOrdens(address _account) public view returns (uint256[] memory){
+      return accountOrdens[_account];
     }
 
     function getBalanceMPWContract() public view returns(uint256){
