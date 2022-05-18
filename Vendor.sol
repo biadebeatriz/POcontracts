@@ -8,11 +8,14 @@ import "./MentoraWellPlayedToken.sol";
 // Learn more about the ERC20 implementation 
 // on OpenZeppelin docs: https://docs.openzeppelin.com/contracts/4.x/api/access#Ownable
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
 import "./Price.sol";
 //TODO: Get Batch
 //TODO: GET ETEPA
 
-contract Vendor is Ownable, PriceConsumerMaticDollar {
+contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessControl {
   
   // Event that log buy operation
   event BuyTokens(address indexed buyer, uint256 indexed amountOfMatic, uint256 indexed amountOfTokens);
@@ -52,8 +55,16 @@ contract Vendor is Ownable, PriceConsumerMaticDollar {
   mapping(uint => Order) public Orders;
 //ordem dos address
   mapping(address=>uint[]) public accountOrdens;
-    
+
+    bytes32 public constant WITHDRAWROLE = keccak256("WITHDRAWROLE");
+    bytes32 public constant BUYPIXROLE = keccak256("BUYPIXROLE");
+    bytes32 public constant BUYORDERROLE = keccak256("BUYORDERROLE");
+
   constructor(address tokenAddress) {
+    _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    _grantRole(WITHDRAWROLE, msg.sender);
+    _grantRole(BUYPIXROLE, msg.sender);
+    _grantRole(BUYORDERROLE, msg.sender);
     isPO = false;
     Mtoken = MentoraWellPlayedToken(tokenAddress);
   }
@@ -95,16 +106,11 @@ contract Vendor is Ownable, PriceConsumerMaticDollar {
 //FUNÇÃO DE ATUALIZAÇÃO DA ORDEM DA COMPRA SE ELE COMPRAR POR PIX
 
 //FUNÇÃO PARA COMPRA COM MATIC E INTERAÇÃO COM O USUARIO
-  function buyTokensMatic() public payable returns (uint256 tokenAmount) {
+  function buyTokensMatic() public payable nonReentrant returns (uint256 tokenAmount) {
     //Require para verificar se foi mandado MATIC
     require(msg.value > 0, "Send ETH to buy some tokens");
-
     uint _amountToBuy  = msg.value * SafeCast.toUint256(tokensPerMatic());
     uint amountToBuy = _amountToBuy/10*10**18;
-    // check if the Vendor Contract has enough amount of tokens for the transaction
-    //uint256 vendorBalance = yourToken.balanceOf(address(this));
-    //require(vendorBalance >= amountToBuy, "Vendor contract has not enough tokens in its balance");
-    
     //Atualiza ordem de compra:
     OrderBuy(amountToBuy,MATIC,msg.sender);
     // EMIT the event
@@ -114,11 +120,11 @@ contract Vendor is Ownable, PriceConsumerMaticDollar {
 
 //FUNÇÃO PARA COMPRA COM PIX
 //INTEGRAÇÃO MENTORA VIA API
-    function BuyPix(uint256 _value, address _account) public onlyOwner{
+    function BuyPix(uint256 _value, address _account) public onlyRole(BUYPIXROLE){
       OrderBuy(_value,PIX,_account);
     }
 
-    function OrderBuy(uint256 _value, bytes32 _method, address _account) public onlyOwner{
+    function OrderBuy(uint256 _value, bytes32 _method, address _account) public onlyRole(BUYPIXROLE){
       Orders[index].account = _account;
       Orders[index].value = _value;
       Orders[index].method = _method;
@@ -128,6 +134,7 @@ contract Vendor is Ownable, PriceConsumerMaticDollar {
       totalSold += _value;
       emit Ordem( _value, _account, _method, index-1);
   }
+
     function getTotalValue(address _account) public view returns (uint256) {
         return totalValue[_account];
     }
@@ -136,13 +143,20 @@ contract Vendor is Ownable, PriceConsumerMaticDollar {
       address account = Orders[_index].account;
       bytes32 method = Orders[_index].method;
       uint256 ammount = Orders[index].value;
-
       return (account, method, ammount);
     }
+
+    function getBalanceMPWContract() public view returns(uint256){
+      uint256 vendorBalance = Mtoken.balanceOf(address(this));
+      return vendorBalance;
+    }
+
 // TODO: TRAVA DE CLAIN E REENTRANCIA
 // TODO: SETAR SALDO
-  function claim() public {
+  function claim() public nonReentrant {
+    uint256 vendorBalance = Mtoken.balanceOf(address(this));
     uint256 amountToBuy = getTotalValue(msg.sender);
+    require(vendorBalance >= amountToBuy, "Vendor contract has not enough tokens in its balance");
     totalValue[msg.sender] = 0;
     (bool sent) = Mtoken.transfer(msg.sender, amountToBuy);
     require(sent, "Failed to transfer token to user");
@@ -150,7 +164,7 @@ contract Vendor is Ownable, PriceConsumerMaticDollar {
   }
 // TODO: TRAVA DE CLAIN E REENTRANCIA
 // TODO: SETAR SALDO
-  function claimMentora(address _account) public onlyOwner{
+  function claimMentora(address _account) public onlyRole(WITHDRAWROLE){
     uint256 amountToBuy = getTotalValue(_account);
     (bool sent) = Mtoken.transfer(_account, amountToBuy);
     require(sent, "Failed to transfer token to user");
@@ -160,7 +174,7 @@ contract Vendor is Ownable, PriceConsumerMaticDollar {
   /**
   * @notice Allow the owner of the contract to withdraw ETH
   */
-  function withdraw() public onlyOwner {
+  function withdraw() public onlyOwner onlyRole(WITHDRAWROLE){
     uint256 ownerBalance = address(this).balance;
     require(ownerBalance > 0, "Owner has not balance to withdraw");
     (bool sent,) = msg.sender.call{value: address(this).balance}("");
