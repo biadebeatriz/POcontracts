@@ -29,8 +29,6 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
   int256  Price2 = 90*10**15;
   int256  Price3 = 95*10**15;
   int256  PricePO =100*10**15;
-  int256 PriceTeste = 4*10**15;
-  int256 PriceTest2 = 5*10**16;
   uint public index;
   uint256 public totalSold;
 
@@ -45,6 +43,8 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
 
 //Set inicial false
   bool public isPO;
+  bool public isP2;
+  bool public isOpen;
 
   struct Order {
     address account;
@@ -58,23 +58,34 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
 //ordem dos address
   mapping(address=>uint[]) public accountOrdens;
 
+  mapping(address => bool) public whitelist;
+
     bytes32 public constant WITHDRAWROLE = keccak256("WITHDRAWROLE");
     bytes32 public constant BUYPIXROLE = keccak256("BUYPIXROLE");
     bytes32 public constant BUYORDERROLE = keccak256("BUYORDERROLE");
+    bytes32 public constant SETERWHITELIST = keccak256("SETERWHITELIST");
 
   constructor(address tokenAddress) {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _grantRole(WITHDRAWROLE, msg.sender);
     _grantRole(BUYPIXROLE, msg.sender);
     _grantRole(BUYORDERROLE, msg.sender);
+    _grantRole(SETERWHITELIST, msg.sender);
     isPO = false;
     Mtoken = MentoraWellPlayedToken(tokenAddress);
   }
 
+  modifier whiteListOn(address _account){
+    require(whitelist[_account]==true, "Your Not in WhiteList");
+    _;
+  }
+
   function priceToken() public view returns (int256){
-    
-    if(isPO==true){
-      return PriceTeste;
+    if(isP2==true){
+      return Price2;
+    }
+    else if(isPO==true){
+      return PricePO;
     }
     else if( maxSupplyBatch1 >=  totalSold){
       return Price1;
@@ -94,7 +105,13 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
     isPO = _PO;
   }
 
+  function setP2(bool _P2) public onlyOwner{
+    isP2 = _P2;
+  }
 
+  function setisOpen(bool _isOpen) public onlyOwner{
+    isOpen = _isOpen;
+  }
 
 // Quantos token da pra comprar com 1059000000000000000 dol?
   function tokensPerMatic() public view returns (int256){
@@ -102,13 +119,10 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
     int256 dol = getPriceMaticperDolar();
     return dol*10**18/_priceToken;
     }
-
-
-
 //FUNÇÃO DE ATUALIZAÇÃO DA ORDEM DA COMPRA SE ELE COMPRAR POR PIX
 
 //FUNÇÃO PARA COMPRA COM MATIC E INTERAÇÃO COM O USUARIO
-  function buyTokensMatic() public payable nonReentrant returns (uint256 tokenAmount) {
+  function buyTokensMaticWhitelist() public payable nonReentrant whiteListOn(msg.sender) returns (uint256 tokenAmount) {
     //Require para verificar se foi mandado MATIC
     require(msg.value > 0, "Send ETH to buy some tokens");
     uint _amountToBuy  = msg.value * SafeCast.toUint256(tokensPerMatic());
@@ -118,6 +132,23 @@ contract Vendor is Ownable, PriceConsumerMaticDollar, ReentrancyGuard, AccessCon
     // EMIT the event
     emit BuyTokens(msg.sender, msg.value, amountToBuy);
     return amountToBuy;
+  }
+
+  function buyTokensMatic() public payable nonReentrant returns (uint256 tokenAmount) {
+    //Require para verificar se foi mandado MATIC
+    require(isOpen,"is not allow this function yet");
+    require(msg.value > 0, "Send ETH to buy some tokens");
+    uint _amountToBuy  = msg.value * SafeCast.toUint256(tokensPerMatic());
+    uint amountToBuy = _amountToBuy/(10*10**14);
+    //Atualiza ordem de compra:
+    OrderBuy(amountToBuy,MATIC,msg.sender);
+    // EMIT the event
+    emit BuyTokens(msg.sender, msg.value, amountToBuy);
+    return amountToBuy;
+  }
+
+  function setWhiteList(address _account) public onlyRole(SETERWHITELIST){
+    whitelist[_account] = true;
   }
 
 //FUNÇÃO PARA COMPRA COM PIX
